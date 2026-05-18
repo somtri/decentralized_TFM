@@ -15,7 +15,7 @@ All loaders return (X_train, X_test, y_train, y_test, meta).
 Features are standardised with StandardScaler.
 Regression targets are also standardised (meta["y_scaler"] holds the fitted scaler).
 """
-
+import os
 from io import BytesIO
 from typing import Tuple
 from urllib.request import urlopen
@@ -24,9 +24,15 @@ from zipfile import ZipFile
 import numpy as np
 import pandas as pd
 from sklearn.datasets import (
-    load_breast_cancer, load_wine, load_digits,
-    load_iris, load_diabetes, load_linnerud,
-    fetch_california_housing, fetch_openml,
+    fetch_california_housing,
+    fetch_openml,
+    load_breast_cancer,
+    load_diabetes,
+    load_digits,
+    load_iris,
+    load_linnerud,
+    load_wine,
+    make_regression,
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -256,6 +262,46 @@ def load_reg(name: str, cfg: Config) -> DataTuple:
 
         X, y = _frame_to_numeric_xy(X_df, y_series)
         label = "Abalone Age/Rings (UCI)"
+
+    elif name == "synthetic_large":
+        n_samples = int(os.environ.get("DICL_SYNTHETIC_N_SAMPLES", "1000000"))
+        n_features = int(os.environ.get("DICL_SYNTHETIC_N_FEATURES", "100"))
+        n_informative = int(os.environ.get("DICL_SYNTHETIC_N_INFORMATIVE", "50"))
+        noise = float(os.environ.get("DICL_SYNTHETIC_NOISE", "10.0"))
+
+        X, y = make_regression(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_informative=n_informative,
+            noise=noise,
+            random_state=SEED,
+        )
+
+        X = X.astype(float)
+        y = y.astype(float)
+        label = f"Synthetic Regression ({n_samples} samples, {n_features} features)"
+
+    elif name == "yolanda":
+        X_df, y_series = fetch_openml(
+            data_id=42705,
+            as_frame=True,
+            return_X_y=True,
+            parser="auto",
+        )
+
+        X, y = _frame_to_numeric_xy(X_df, y_series)
+        sample_cap = os.environ.get("DICL_YOLANDA_N_SAMPLES")
+
+        if sample_cap:
+            n_samples = min(int(sample_cap), len(y))
+            rng = np.random.default_rng(SEED)
+            idx = rng.choice(len(y), size=n_samples, replace=False)
+            X = X[idx]
+            y = y[idx]
+            label = f"Yolanda (OpenML 42705, {n_samples} sample subset)"
+
+        else:
+            label = "Yolanda (OpenML 42705)"
 
     else:
         raise ValueError(f"Unknown regression dataset: {name!r}")
