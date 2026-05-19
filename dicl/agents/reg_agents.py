@@ -150,7 +150,17 @@ class TabICLRegAgent(RegAgent):
         self.clf.fit(self.C_x, self.C_y)
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return self.clf.predict(X).astype(float)
+        batch_size = int(os.environ.get("DICL_REG_PRED_BATCH_SIZE", "4096"))
+
+        if len(X) <= batch_size:
+            return self.clf.predict(X).astype(float)
+
+        preds = []
+        for start in range(0, len(X), batch_size):
+            end = min(start + batch_size, len(X))
+            preds.append(self.clf.predict(X[start:end]).astype(float))
+
+        return np.concatenate(preds, axis=0).astype(float)
 
     @property
     def backbone(self) -> str:
